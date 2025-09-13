@@ -67,11 +67,13 @@ terraform destroy
 ## 주요 변수
 
 ### SSH 연결 설정
+
 - `ssh.host`: 서버 IP 주소 또는 호스트명
 - `ssh.user`: SSH 접속 사용자명
 - `ssh.public_key_path`: SSH 공개키 파일 경로
 
 ### SSL 인증서 설정
+
 - `acme_email`: SSL 인증서 발급용 이메일 주소
 
 ## 주의사항
