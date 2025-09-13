@@ -2,28 +2,11 @@
 # 이 파일을 terraform.tfvars로 복사하여 실제 값으로 수정해서 사용하세요
 
 # 프로젝트 기본 정보
-project_name = "my-home-k8s-project"
-environment  = "dev"
+acme_email = "busyjae9@gmail.com"
 
-# Kubernetes 설정
-kubeconfig_path = "~/.kube/config"
-kube_context    = "default"  # kubectl config get-contexts로 확인
-namespace       = "default"
-
-# 애플리케이션 설정
-app_replicas = 2
-app_image    = "nginx:latest"
-app_port     = 80
-
-# 리소스 제한 설정
-cpu_request    = "100m"
-memory_request = "128Mi"
-cpu_limit      = "500m"
-memory_limit   = "512Mi"
-
-# 공통 레이블
-common_labels = {
-  team        = "devops"
-  owner       = "your-name"
-  managed_by  = "terraform"
+# 메인 서버 SSH 접속 정보
+ssh = {
+  host            = "192.168.0.41"
+  user            = "seaweeds"
+  public_key_path = "~/.ssh/id_rsa.pub"
 }

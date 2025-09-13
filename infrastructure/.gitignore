@@ -10,6 +10,7 @@
 terraform.tfvars
 *.auto.tfvars
 *.auto.tfvars.json
+*/.kube/config
 
 # 로그 파일
 *.log
