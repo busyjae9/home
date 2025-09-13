@@ -1,0 +1,22 @@
+# 프로젝트 설정 예시
+# 이 파일을 terraform.tfvars로 복사하여 실제 값으로 수정해서 사용하세요
+
+# 프로젝트 기본 정보
+project_name = "my-awesome-project"
+environment  = "dev"
+
+# AWS 설정
+aws_region         = "ap-northeast-2"
+availability_zones = ["ap-northeast-2a", "ap-northeast-2b", "ap-northeast-2c"]
+
+# 네트워크 설정
+vpc_cidr               = "10.0.0.0/16"
+public_subnet_cidrs    = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+private_subnet_cidrs   = ["10.0.10.0/24", "10.0.20.0/24", "10.0.30.0/24"]
+
+# 공통 태그
+common_tags = {
+  Team        = "DevOps"
+  Owner       = "your-name@company.com"
+  CostCenter  = "engineering"
+}
