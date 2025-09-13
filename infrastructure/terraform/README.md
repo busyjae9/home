@@ -4,7 +4,7 @@
 
 ## 파일 구조
 
-```
+```plaintext
 terraform/
 ├── main.tf                    # 메인 테라폼 설정 및 Kubernetes provider 설정
 ├── variables.tf               # 입력 변수 정의
