@@ -37,17 +37,18 @@
 1. 코드 작성 컴퓨터
     1. 맥북 Apple M1 Pro 32GB RAM
 2. 서버 인프라 컴퓨터
-    1. 메인 : Beelink SER8 RYGEN 8745HS 780M GPU
+    1. 공유기 : ipTIME AX2004M
+    2. 메인 : Beelink SER8 RYGEN 8745HS 780M GPU
         - 64GB RAM
         - 1TB SSD
         - 리눅스
-    2. 모델 러너 : 조립 컴퓨터 중고
+    3. 모델 러너 : 조립 컴퓨터 중고
         - 16GB RAM
         - 256GB SSD
         - 리눅스
         - 1660TI GPU 6GB VRAM
         - 9400F CPU
-    3. 모델 학습 : 완본체 컴퓨터
+    4. 모델 학습 : 완본체 컴퓨터
         - 128GB RAM
         - 1TB SSD
         - 윈도우 11

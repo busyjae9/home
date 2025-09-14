@@ -10,3 +10,43 @@ ssh = {
   user            = "seaweeds"
   public_key_path = "~/.ssh/id_rsa.pub"
 }
+
+# Traefik Ingress Controller 설정
+ingress = {
+  name          = "traefik"
+  namespace     = "traefik-system"
+  chart_version = "24.0.0"
+  default_cert_secret_name = "traefik-default-cert"
+
+  node_ports = {
+    http  = 30080
+    https = 30443
+  }
+
+  dashboard = {
+    enabled  = true
+    host     = "traefik.local"
+    insecure = false
+  }
+}
+
+# DNS 서버 설정
+dns = {
+  namespace   = "dns-system"
+  target_node = "main-server"
+
+  domains = [
+    {
+      name = "traefik.local"
+      ip   = "192.168.0.41"
+    },
+    {
+      name = "grafana.local"
+      ip   = "192.168.0.41"
+    },
+    {
+      name = "prometheus.local"
+      ip   = "192.168.0.41"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
-module "ssh-connect" {
-  source = "./modules/ssh-connect"
+module "ssh_connect" {
+  source = "./modules/ssh_connect"
 
   ssh = var.ssh
 }

@@ -1,0 +1,524 @@
+# 클라우드플레어 원본 CA 인증서를 위한 변수
+variable "cloudflare_origin_cert" {
+  description = "Cloudflare Origin CA certificate content (PEM format)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "cloudflare_origin_key" {
+  description = "Cloudflare Origin CA private key content (PEM format)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# 클라우드플레어 원본 CA 인증서를 위한 시크릿 (kube-system 네임스페이스)
+resource "kubernetes_secret" "cloudflare_origin_cert" {
+  metadata {
+    name      = "cloudflare-origin-cert"
+    namespace = "kube-system"
+  }
+
+  type = "kubernetes.io/tls"
+
+  data = {
+    "tls.crt" = var.cloudflare_origin_cert
+    "tls.key" = var.cloudflare_origin_key
+  }
+}
+
+# 클라우드플레어 원본 CA 인증서를 위한 시크릿 (toster-prod 네임스페이스)
+resource "kubernetes_secret" "cloudflare_origin_cert_toast" {
+  metadata {
+    name      = "cloudflare-origin-cert"
+    namespace = "toster-prod"
+  }
+
+  type = "kubernetes.io/tls"
+
+  data = {
+    "tls.crt" = var.cloudflare_origin_cert
+    "tls.key" = var.cloudflare_origin_key
+  }
+}
+
+# 클라우드플레어 원본 CA 인증서를 위한 시크릿 (toster-stage 네임스페이스)
+resource "kubernetes_secret" "cloudflare_origin_cert_stage" {
+  metadata {
+    name      = "cloudflare-origin-cert"
+    namespace = "toster-stage"
+  }
+
+  type = "kubernetes.io/tls"
+
+  data = {
+    "tls.crt" = var.cloudflare_origin_cert
+    "tls.key" = var.cloudflare_origin_key
+  }
+}
+
+# Traefik 설정 최적화
+resource "kubernetes_manifest" "traefik_config" {
+  manifest = {
+    apiVersion = "helm.cattle.io/v1"
+    kind       = "HelmChartConfig"
+    metadata = {
+      name      = "traefik"
+      namespace = "kube-system"
+    }
+    spec = {
+      valuesContent = <<-EOT
+        ports:
+          web:
+            nodePort: 32080
+          websecure:
+            nodePort: 32443
+        service:
+          type: NodePort
+        ingressClass:
+          enabled: true
+          isDefaultClass: true
+        logs:
+          general:
+            level: INFO
+          access:
+            enabled: true
+            format: json
+        # 클라우드플레어 원본 CA 인증서 설정
+        tls:
+          stores:
+            default:
+              defaultCertificate:
+                secretName: "cloudflare-origin-cert"
+        additionalArguments:
+          - "--providers.kubernetesingress.ingressendpoint.publishedservice=kube-system/traefik"
+          - "--log.level=INFO"
+          # 클라우드플레어 프록시 관련 설정
+          - "--entrypoints.web.forwardedHeaders.insecure"
+          - "--entrypoints.websecure.forwardedHeaders.insecure"
+      EOT
+    }
+  }
+}
+
+# 기본 도메인을 위한 IngressRoute
+resource "kubernetes_manifest" "main_route" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "main-route"
+      namespace = "toster-prod"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      tls = {
+        secretName = "cloudflare-origin-cert"
+      }
+      routes = [
+        {
+          match = "Host(`toster.one`)"
+          kind  = "Rule"
+          services = [
+            {
+              name           = "bff"
+              port           = 80
+              passHostHeader = true
+            }
+          ]
+          middlewares = [
+            {
+              name      = "secure-headers"
+              namespace = "toster-prod"
+            },
+            {
+              name      = "cloudflare-headers"
+              namespace = "toster-prod"
+            }
+            # 인증 백엔드가 준비되면 아래 미들웨어를 활성화
+            # {
+            #   name      = "auth-forward"
+            #   namespace = "toster-prod"
+            # }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+# 기본 도메인을 위한 IngressRoute 추가
+resource "kubernetes_manifest" "main_api_core_ingressroute" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "main-core-route"
+      namespace = "toster-prod"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      tls = {
+        secretName = "cloudflare-origin-cert"
+      }
+      routes = [
+        {
+          match    = "Host(`live-core.toster.one`)"
+          kind     = "Rule"
+          priority = 100
+          services = [
+            {
+              name           = "core"
+              port           = 80
+              passHostHeader = true
+            }
+          ]
+          middlewares = [
+            {
+              name      = "secure-headers"
+              namespace = "toster-prod"
+            },
+            {
+              name      = "cloudflare-headers"
+              namespace = "toster-prod"
+            }
+            # 인증 백엔드가 준비되면 아래 미들웨어를 활성화
+            # {
+            #   name      = "auth-forward"
+            #   namespace = "toster-prod"
+            # }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+# 스테이지 서브도메인을 위한 별도 IngressRoute 추가
+resource "kubernetes_manifest" "stage_ingressroute" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "stage-route"
+      namespace = "toster-stage"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      tls = {
+        secretName = "cloudflare-origin-cert"
+      }
+      routes = [
+        {
+          match = "Host(`stage.toster.one`)"
+          kind  = "Rule"
+          services = [
+            {
+              name           = "bff"
+              port           = 80
+              passHostHeader = true
+            }
+          ]
+          middlewares = [
+            {
+              name      = "secure-headers"
+              namespace = "toster-stage"
+            },
+            {
+              name      = "cloudflare-headers"
+              namespace = "toster-stage"
+            },
+            # 인증 백엔드가 준비되면 아래 미들웨어를 활성화
+            # {
+            #   name      = "auth-forward"
+            #   namespace = "toster-stage"
+            # },
+            {
+              name      = "ip-whitelist"
+              namespace = "toster-stage"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+# 기본 도메인을 위한 IngressRoute 추가
+resource "kubernetes_manifest" "stage_api_core_ingressroute" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "stage-core-route"
+      namespace = "toster-stage"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      tls = {
+        secretName = "cloudflare-origin-cert"
+      }
+      routes = [
+        {
+          match    = "Host(`stage-core.toster.one`)"
+          kind     = "Rule"
+          priority = 100
+          services = [
+            {
+              name           = "core"
+              port           = 80
+              passHostHeader = true
+            }
+          ]
+          middlewares = [
+            {
+              name      = "secure-headers"
+              namespace = "toster-stage"
+            },
+            {
+              name      = "cloudflare-headers"
+              namespace = "toster-stage"
+            },
+            # 인증 백엔드가 준비되면 아래 미들웨어를 활성화
+            # {
+            #   name      = "auth-forward"
+            #   namespace = "toster-stage"
+            # }
+            {
+              name      = "ip-whitelist"
+              namespace = "toster-stage"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+# 내부 네트워크 IP 범위 변수 추가
+variable "internal_ip_ranges" {
+  description = "내부 네트워크 IP 범위 목록"
+  type        = list(string)
+  default = [
+    "14.5.13.78/32", # 현재 IP
+    "127.0.0.1/32",  # 로컬호스트
+    "10.0.0.0/8",    # 내부 네트워크
+    "172.16.0.0/12", # 내부 네트워크
+    "192.168.0.0/16" # 내부 네트워크
+  ]
+}
+
+# 인증 서버를 통한 사용자 ID 추출 및 헤더 추가를 위한 ForwardAuth 미들웨어
+# resource "kubernetes_manifest" "auth_forward" {
+#   manifest = {
+#     apiVersion = "traefik.containo.us/v1alpha1"
+#     kind       = "Middleware"
+#     metadata = {
+#       name      = "auth-forward"
+#       namespace = "toster-prod"
+#     }
+#     spec = {
+#       forwardAuth = {
+#         address             = "http://auth.toster-prod.svc.cluster.local:3001/validate-token"
+#         authResponseHeaders = ["X-User-ID", "X-User-Role"] # 인증 서버가 응답에 추가할 헤더
+#         trustForwardHeader  = true
+#       }
+#     }
+#   }
+# }
+
+# 스테이지 환경을 위한 IP 화이트리스트 미들웨어
+resource "kubernetes_manifest" "ip_whitelist_stage" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "ip-whitelist"
+      namespace = "toster-stage"
+    }
+    spec = {
+      ipAllowList = {
+        sourceRange = concat([
+          "103.21.244.0/22",       # Cloudflare IP 범위
+          "103.22.200.0/22",       # Cloudflare IP 범위
+          "103.31.4.0/22",         # Cloudflare IP 범위
+          "104.16.0.0/13",         # Cloudflare IP 범위
+          "104.24.0.0/14",         # Cloudflare IP 범위
+          "108.162.192.0/18",      # Cloudflare IP 범위
+          "131.0.72.0/22",         # Cloudflare IP 범위
+          "141.101.64.0/18",       # Cloudflare IP 범위
+          "162.158.0.0/15",        # Cloudflare IP 범위
+          "172.64.0.0/13",         # Cloudflare IP 범위
+          "173.245.48.0/20",       # Cloudflare IP 범위
+          "188.114.96.0/20",       # Cloudflare IP 범위
+          "190.93.240.0/20",       # Cloudflare IP 범위
+          "197.234.240.0/22",      # Cloudflare IP 범위
+          "198.41.128.0/17"        # Cloudflare IP 범위
+        ], var.internal_ip_ranges) # INTERNAL IP 범위 추가
+        ipStrategy = {
+          depth       = 1 # X-Forwarded-For 헤더의 첫 번째 IP 사용
+          excludedIPs = []
+        }
+      }
+    }
+  }
+}
+
+# 스테이지 환경을 위한 인증 서버 미들웨어
+# resource "kubernetes_manifest" "auth_forward_stage" {
+#   manifest = {
+#     apiVersion = "traefik.containo.us/v1alpha1"
+#     kind       = "Middleware"
+#     metadata = {
+#       name      = "auth-forward"
+#       namespace = "toster-stage"
+#     }
+#     spec = {
+#       forwardAuth = {
+#         address             = "http://auth.toster-stage.svc.cluster.local:3001/validate-token"
+#         authResponseHeaders = ["X-User-ID", "X-User-Role"] # 인증 서버가 응답에 추가할 헤더
+#         trustForwardHeader  = true
+#       }
+#     }
+#   }
+# }
+
+# 스테이지 환경을 위한 보안 헤더 미들웨어
+resource "kubernetes_manifest" "secure_headers_stage" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "secure-headers"
+      namespace = "toster-stage"
+    }
+    spec = {
+      headers = {
+        stsSeconds              = 31536000
+        stsIncludeSubdomains    = true
+        forceSTSHeader          = true
+        contentTypeNosniff      = true
+        browserXssFilter        = true
+        customFrameOptionsValue = "SAMEORIGIN"
+      }
+    }
+  }
+}
+
+# 스테이지 환경을 위한 클라우드플레어 헤더 미들웨어
+resource "kubernetes_manifest" "cloudflare_middleware_stage" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "cloudflare-headers"
+      namespace = "toster-stage"
+    }
+    spec = {
+      headers = {
+        customRequestHeaders = {
+          "X-Forwarded-Proto" = "https"
+        }
+        hostsProxyHeaders = ["X-Forwarded-Host"]
+      }
+    }
+  }
+}
+
+# 리다이렉트를 위한 미들웨어 추가
+resource "kubernetes_manifest" "redirect_to_main" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "redirect-to-main"
+      namespace = "toster-prod"
+    }
+    spec = {
+      redirectRegex = {
+        regex       = "^https://([a-z0-9.-]+)\\.toster\\.one/(.*)"
+        replacement = "https://toster.one/$${2}"
+        permanent   = true
+      }
+    }
+  }
+}
+
+# 모든 서브도메인을 위한 IngressRoute 추가 (toster.one으로 리다이렉트)
+resource "kubernetes_manifest" "wildcard_ingressroute" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "IngressRoute"
+    metadata = {
+      name      = "wildcard-route"
+      namespace = "toster-prod"
+    }
+    spec = {
+      entryPoints = ["websecure"]
+      tls = {
+        secretName = "cloudflare-origin-cert"
+      }
+      routes = [
+        {
+          match    = "HostRegexp(`{subdomain:[a-z0-9.-]+}.toster.one`) && !Host(`stage.toster.one`) && !Host(`stage-core.toster.one`) && !Host(`live-core.toster.one`) && !Host(`toster.one`)"
+          kind     = "Rule"
+          priority = 10
+          services = [
+            {
+              name = "noop@internal"
+              kind = "TraefikService"
+            }
+          ]
+          middlewares = [
+            {
+              name      = "redirect-to-main"
+              namespace = "toster-prod"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+# Add secure headers middleware
+resource "kubernetes_manifest" "secure_headers" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "secure-headers"
+      namespace = "toster-prod"
+    }
+    spec = {
+      headers = {
+        stsSeconds              = 31536000
+        stsIncludeSubdomains    = true
+        forceSTSHeader          = true
+        contentTypeNosniff      = true
+        browserXssFilter        = true
+        customFrameOptionsValue = "SAMEORIGIN"
+      }
+    }
+  }
+}
+
+resource "kubernetes_manifest" "cloudflare_middleware" {
+  manifest = {
+    apiVersion = "traefik.containo.us/v1alpha1"
+    kind       = "Middleware"
+    metadata = {
+      name      = "cloudflare-headers"
+      namespace = "toster-prod"
+    }
+    spec = {
+      headers = {
+        customRequestHeaders = {
+          "X-Forwarded-Proto" = "https"
+        }
+        hostsProxyHeaders = ["X-Forwarded-Host"]
+      }
+    }
+  }
+}
